@@ -5,8 +5,8 @@ import enquirer from 'enquirer';
 import ora from 'ora';
 import parseArgs from 'yargs-parser';
 
-import { ChatGPTClient } from './client.js';
-import { ensureSessionToken } from './config.js';
+import { AChatGPTAPI, ChatGPTAPIBrowser } from 'chatgpt';
+import { ensureEmailAndPassword } from './config.js';
 
 const CUSTOM_MESSAGE_OPTION = '[write own message]...';
 const MORE_OPTION = '[ask for more ideas]...';
@@ -42,12 +42,14 @@ run(diff)
   });
 
 async function run(diff: string) {
-  const api = new ChatGPTClient({
-    sessionToken: await ensureSessionToken(),
+  const config = await ensureEmailAndPassword();
+  const api = new ChatGPTAPIBrowser({
+    email: config.email,
+    password: config.password,
   });
 
   spinner.start('Authorizing with OpenAI...');
-  await api.ensureAuth();
+  await api.initSession()
   spinner.stop();
 
   const firstRequest =
@@ -79,49 +81,40 @@ async function run(diff: string) {
       firstRequestSent = true;
 
       if (answer.message === CUSTOM_MESSAGE_OPTION) {
-        execSync('git commit', { stdio: 'inherit' });
+        execSync('git commit', {stdio: 'inherit'});
+        await api.closeSession();
         return;
       } else if (answer.message === MORE_OPTION) {
         continue;
       } else {
-        execSync(`git commit -m '${escapeCommitMessage(answer.message)}'`, { stdio: 'inherit' });
+        execSync(`git commit -m '${escapeCommitMessage(answer.message)}'`, {stdio: 'inherit'});
+        await api.closeSession();
         return;
       }
     } catch (e) {
       console.log('Aborted.');
       console.log(e);
       process.exit(1);
+      await api.closeSession();
     }
   }
 }
 
-async function getMessages(api: ChatGPTClient, request: string) {
+async function getMessages(api: AChatGPTAPI, request: string) {
   spinner.start('Asking ChatGPT 🤖 for commit messages...');
 
   // send a message and wait for the response
-  try {
-    const response = await api.getAnswer(request);
+  const response = (await api.sendMessage(request)).response;
 
-    const messages = response
-      .split('\n')
-      .filter(line => line.match(/^(\d+\.|-|\*)\s+/))
-      .map(normalizeMessage);
+  const messages = response
+    .split('\n')
+    .filter(line => line.match(/^(\d+\.|-|\*)\s+/))
+    .map(normalizeMessage);
 
-    spinner.stop();
+  spinner.stop();
 
-    messages.push(CUSTOM_MESSAGE_OPTION, MORE_OPTION);
-    return messages;
-  } catch (e) {
-    spinner.stop();
-    if (e.message === 'Unauthorized') {
-      console.log('Looks like your session token has expired');
-      await ensureSessionToken(true);
-      // retry
-      return getMessages(api, request);
-    } else {
-      throw e;
-    }
-  }
+  messages.push(CUSTOM_MESSAGE_OPTION, MORE_OPTION);
+  return messages;
 }
 
 function normalizeMessage(line: string) {
