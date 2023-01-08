@@ -6,26 +6,38 @@ import ExpiryMap from 'expiry-map';
 import fetch, { Response } from 'node-fetch';
 
 export type ClientConfig = {
+  cfClearance: string;
   sessionToken: string;
+  userAgent: string;
 };
 
 const KEY_ACCESS_TOKEN = 'accessToken';
-const USER_AGENT =
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36';
 const cache = new ExpiryMap(10 * 1000);
 
-export async function refreshAccessToken(sessionToken: string) {
+export async function refreshAccessToken(config: ClientConfig) {
   if (cache.get(KEY_ACCESS_TOKEN)) {
     return cache.get(KEY_ACCESS_TOKEN);
   }
   const resp = await fetch('https://chat.openai.com/api/auth/session', {
     headers: {
-      'User-Agent': USER_AGENT,
-      cookie: '__Secure-next-auth.session-token=' + sessionToken,
+      'User-Agent': config.userAgent,
+      cookie: `__Secure-next-auth.session-token=${config.sessionToken}; cf_clearance=${config.cfClearance}`,
+      'x-openai-assistant-app-id': '',
+      'accept-language': 'en-US,en;q=0.9',
+      'accept-encoding': 'gzip, deflate, br',
+      origin: 'https://chat.openai.com',
+      referer: 'https://chat.openai.com/chat',
+      'sec-ch-ua': '"Not?A_Brand";v="8", "Chromium";v="108", "Google Chrome";v="108"',
+      'sec-ch-ua-platform': '"macOS"',
+      'sec-fetch-dest': 'empty',
+      'sec-fetch-mode': 'cors',
+      'sec-fetch-site': 'same-origin',
     },
   })
     .then(r => r.json() as any)
-    .catch(() => ({}));
+    .catch((e) => {
+      console.log(e); return {}
+    });
 
   if (!resp.accessToken) {
     throw new Error('Unauthorized');
@@ -39,19 +51,30 @@ export class ChatGPTClient {
   constructor(public config: ClientConfig, public converstationId: string = uuidv4()) {}
 
   async ensureAuth() {
-    await refreshAccessToken(this.config.sessionToken);
+    await refreshAccessToken(this.config);
   }
   async getAnswer(question: string): Promise<string> {
-    const accessToken = await refreshAccessToken(this.config.sessionToken);
+    const accessToken = await refreshAccessToken(this.config);
 
     let response = '';
     return new Promise((resolve, reject) => {
       fetchSSE('https://chat.openai.com/backend-api/conversation', {
         method: 'POST',
         headers: {
-          'User-Agent': USER_AGENT,
+          'User-Agent': this.config.userAgent,
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`,
+          'x-openai-assistant-app-id': '',
+          'accept-language': 'en-US,en;q=0.9',
+          'accept-encoding': 'gzip, deflate, br',
+          origin: 'https://chat.openai.com',
+          referer: 'https://chat.openai.com/chat',
+          'sec-ch-ua':
+              '"Not?A_Brand";v="8", "Chromium";v="108", "Google Chrome";v="108"',
+          'sec-ch-ua-platform': '"macOS"',
+          'sec-fetch-dest': 'empty',
+          'sec-fetch-mode': 'cors',
+          'sec-fetch-site': 'same-origin',
         },
         body: JSON.stringify({
           action: 'next',

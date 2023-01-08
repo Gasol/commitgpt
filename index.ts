@@ -42,9 +42,7 @@ run(diff)
   });
 
 async function run(diff: string) {
-  const api = new ChatGPTClient({
-    sessionToken: await ensureSessionToken(),
-  });
+  const api = new ChatGPTClient(await ensureSessionToken());
 
   spinner.start('Authorizing with OpenAI...');
   await api.ensureAuth();
