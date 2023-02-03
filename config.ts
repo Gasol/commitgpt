@@ -16,7 +16,7 @@ export async function ensureEmailAndPassword(clean?: boolean): Promise<ClientCon
     config = JSON.parse(readFileSync(CONFIG_FILE_NAME, 'utf-8'));
   }
 
-  if (!config.email || !config.password) {
+  if (!config || !config.email || !config.password) {
     config = await promptEmailAndPassword();
   }
 
