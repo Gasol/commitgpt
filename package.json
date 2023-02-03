@@ -32,7 +32,7 @@
     "yargs-parser": "^21.1.1"
   },
   "devDependencies": {
-    "ts-node": "^10.9.1"
+    "@types/node": "^18.11.18"
   },
   "peerDependencies": {
     "puppeteer": "^19.4.1"
