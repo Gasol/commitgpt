@@ -4,6 +4,7 @@ import { execSync } from 'child_process';
 import enquirer from 'enquirer';
 import ora from 'ora';
 import parseArgs from 'yargs-parser';
+import fs from 'fs';
 
 import { AChatGPTAPI, ChatGPTAPIBrowser } from 'chatgpt';
 import { ensureEmailAndPassword } from './config.js';
@@ -19,14 +20,19 @@ const CONVENTIONAL_REQUEST = conventionalCommit ? `following conventional commit
 
 let diff = '';
 try {
-  diff = execSync('git diff --cached').toString();
-  if (!diff) {
-    console.log('No changes to commit.');
-    process.exit(0);
+  diff = fs.readFileSync(0, "utf-8");
+} catch (e) { }
+if (diff.length === 0) {
+  try {
+    diff = execSync('git diff --cached').toString();
+    if (!diff) {
+      console.log('No changes to commit.');
+      process.exit(0);
+    }
+  } catch (e) {
+    console.log('Failed to run git diff --cached');
+    process.exit(1);
   }
-} catch (e) {
-  console.log('Failed to run git diff --cached');
-  process.exit(1);
 }
 
 run(diff)
@@ -81,13 +87,13 @@ async function run(diff: string) {
       firstRequestSent = true;
 
       if (answer.message === CUSTOM_MESSAGE_OPTION) {
-        execSync('git commit', {stdio: 'inherit'});
+        execSync('git commit', { stdio: 'inherit' });
         await api.closeSession();
         return;
       } else if (answer.message === MORE_OPTION) {
         continue;
       } else {
-        execSync(`git commit -m '${escapeCommitMessage(answer.message)}'`, {stdio: 'inherit'});
+        execSync(`git commit -m '${escapeCommitMessage(answer.message)}'`, { stdio: 'inherit' });
         await api.closeSession();
         return;
       }
